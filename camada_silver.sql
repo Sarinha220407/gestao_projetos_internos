@@ -1,38 +1,64 @@
+SET ThousandSep='.';
+SET DecimalSep=',';
+SET MoneyThousandSep='.';
+SET MoneyDecimalSep=',';
+SET MoneyFormat='R$ #.##0,00;-R$ #.##0,00';
+SET TimeFormat='hh:mm:ss';
+SET DateFormat='DD/MM/YYYY';
+SET TimestampFormat='DD/MM/YYYY hh:mm:ss[.fff]';
+SET FirstWeekDay=6;
+SET BrokenWeeks=1;
+SET ReferenceDay=0;
+SET FirstMonthOfYear=1;
+SET CollationLocale='pt-BR';
+SET CreateSearchIndexOnReload=1;
+SET MonthNames='jan.;fev.;mar.;abr.;mai.;jun.;jul.;ago.;set.;out.;nov.;dez.';
+SET LongMonthNames='janeiro;fevereiro;março;abril;maio;junho;julho;agosto;setembro;outubro;novembro;dezembro';
+SET DayNames='seg.;ter.;qua.;qui.;sex.;sáb.;dom.';
+SET LongDayNames='segunda-feira;terça-feira;quarta-feira;quinta-feira;sexta-feira;sábado;domingo';
+SET NumericalAbbreviation='3:k;6:M;9:G;12:T;15:P;18:E;21:Z;24:Y;-3:m;-6:μ;-9:n;-12:p;-15:f;-18:a;-21:z;-24:y';
+
+
+SET bronze_layer = 'lib://Eldorado Data Folder - 3 Recursos Humanos - People Analytics/01. HR Medallion/01. Bronze/';
+SET silver_layer = 'lib://Eldorado Data Folder - 3 Recursos Humanos - People Analytics/01. HR Medallion/02. Silver/';
+SET gold_layer = 'lib://Eldorado Data Folder - 3 Recursos Humanos - People Analytics/01. HR Medallion/03. Gold/';
+
+
 bz_projetos_pa_raw:
 Load
 *
 FROM [$(bronze_layer)bz_projetos_pa_f.QVD] (qvd);
-
-
-sv_projetos_pa:
-
+ 
+ 
+sv_projetos_pa_f:
+ 
 LOAD
 *,
-
+ 
 // Separa Data e Hora de Criação
 Date(created_date) 																									as data_criacao,  
 Time(created_date) 																									as hora_criacao,
-
+ 
 // Regra: se activated_date estiver nula ou vazia e closed_date estiver preenchida, atribuir created_date à activated_date, mantendo o formato de data e hora.
 Date(
-	IF(
+IF(
     	IsNull(activated_date) and Not IsNull (closed_date),
         created_date,
         activated_date))																								as data_status_active,
-
+ 
 Time(
-	IF(
+IF(
     	IsNull(activated_date) and Not IsNull (closed_date),
         created_date,
         activated_date))																								as hora_status_active, 
         
 Date(closed_date)																										as data_status_closed,
 Time(closed_date)																										as hora_status_closed;
-
-
+ 
+ 
 // Load Precedente(carrega primeiro a tabela debaixo e depois a de cima)
 Load
-
+ 
 // Transformação de Dados
 num(ID) 																												as id,
 "Work Item Type" 																										as tipo,
@@ -40,86 +66,56 @@ Title 																													as titulo,
 SubField("Assigned To", '<' ,1 ) 																						as responsavel,
 State 																													as status,
 "Tags" 																													as tags,
-
+ 
 // Limpa os campos que trazem '' e os transformam em NULL
 IF(Len(Trim("Activated Date")) = 0, Null(), "Activated Date")															as activated_date,
 IF(Len(Trim("Closed Date")) = 0, Null(), "Closed Date")																	as closed_date,
 IF(Len(Trim("Created Date")) = 0, Null(), "Created Date")																as created_date,
-
+ 
 // Tranformação de Métricas
 num("Original Estimate") 																								as horas_estimadas,
 num("Remaining Work") 																									as horas_restantes,
 num("Completed Work") 																									as horas_concluidas,
-
+ 
 // Traz 'Backlog' para os campos que forem PEOPLE ANALYTICS e traz apenas os números de PEOPLE ANALYTICS\Sprint...
 if ("Iteration Path" = 'PEOPLE ANALYTICS', 'Backlog', Num(PurgeChar("Iteration Path", 'PEOPLE ANALYTICS\Sprint '))) 	as sprint,
-
+ 
 // Transformação de Dados
 Priority 																												as prioridade,
 Parent 																													as parent
-
+ 
 RESIDENT bz_projetos_pa_raw;
-Store sv_projetos_pa into [$(silver_layer) sv_projetos_pa.QVD] (qvd);
-
-
-
-//Criação de Calendário
-Let vDataInicio = '2003-01-01';
-Let vDataFim = Date(MakeDate(Year(Today())+1, 12, 31), 'YYYY-MM-DD');
-sv_calendario_d:
-Load
-Date(TempDate, 'DD.MM.YYYY') 																							as date_key,
-Date(Floor(MonthEnd(TempDate)), 'DD.MM.YYYY') 																			as load_month,
-Date(Floor(MonthEnd(TempDate)), 'MM/YYYY')																				as ano_mes_numero,
-If(Date#(Date(Floor(MonthEnd(TempDate)), 'MM/YYYY'),'MM/YYYY') <= MonthStart(Today()),
-Date(Floor(MonthEnd(TempDate)), 'MM/YYYY')) 																			as ano_mes_numero_reduzido,
-Year(TempDate) 																											as ano,
-Num(Month(TempDate)) 																									as mes_numero,
-Month(TempDate) 																										as mes_nome,
-Day(TempDate) 																											as dia,
-'Sem ' & Ceil(Day(TempDate)/7) 																							as semana_mes,
-Week(TempDate) 																											as semana_ano,
-Num(Weekday(TempDate)) 																									as dia_semana_numero,
-Date(TempDate, 'WWW') 																									as dia_semana_nome,
-Month(TempDate) & ' - ' & Year(TempDate)																				as ano_mes, //Date(MonthStart(TempDate), 'YYYY-MM')
-If(MonthStart(TempDate) = MonthStart(Today()), 'Sim', 'Não') 															as mes_atual,
-If(YearStart(TempDate) = YearStart(Today()), 'Sim', 'Não') 																as ano_atual,
-Date(TempDate, 'YYYY-Q') 																								as ano_trimestre,
-Dual('Sem ' & Week(TempDate) & ' ' & Year(TempDate), WeekStart(TempDate)) 												as ano_semana,
-If(TempDate <= Today(), 'Historico', 'Futuro') 																			as periodo_status,
-If(TempDate = Today(), 'Sim', 'Não') 																					as hoje,
-If(TempDate = Today() - 1, 'Sim', 'Não') 																				as ontem,
-If(TempDate = Today() + 1, 'Sim', 'Não') 																				as amanha,
-If(WeekDay(TempDate) >= 6, 'Sim', 'Não') 																				as final_semana,
-NetworkDays(TempDate, TempDate) 																						as dia_util,
-Ceil(Month(TempDate)/3) 																								as trimestre_fiscal,
-Ceil(Month(TempDate)/6) 																								as semestre,
-'S' & Ceil(Month(TempDate)/6) & ' - ' & Year(TempDate) 																	as ano_semestre;
-
-Load
-    TempDate
-Where
-    TempDate >= Date('$(vDataInicio)') and TempDate <= Date('$(vDataFim)');
-
-Load
-    MakeDate(2003,1,1) + IterNo() - 1 																					as TempDate
-AutoGenerate 1
-While IterNo() <= (Date('$(vDataFim)') - Date('$(vDataInicio)') + 1);
-
-
+Store sv_projetos_pa_f into [$(silver_layer)sv_projetos_pa_f.QVD] (qvd);
+ 
+ 
+ 
 // Filtra por Task e faz a contagem das horas, agrupando-as ao seu parent(User Story ou Enhancement)
 total_horas_us:
-LEFT JOIN (sv_projetos_pa)
+LEFT JOIN (sv_projetos_pa_f)
 Load
     parent 																												as id,
     Sum(horas_estimadas) 																								as total_horas_estimadas,
     Sum(horas_concluidas)  																								as total_horas_concluidas,
     Sum(horas_restantes)																								as total_horas_restantes
-RESIDENT sv_projetos_pa
+ 
+RESIDENT sv_projetos_pa_f
 WHERE tipo = 'Task'
 GROUP BY parent
 ;
-
+ 
+ 
+ 
+titulo_projeto: 
+left join(sv_projetos_pa_f)
+load Distinct
+id as parent,
+    titulo as tituloProjeto
+RESIDENT sv_projetos_pa_f
+WHERE tipo = 'User Story' or tipo = 'Enhancement'
+ 
+;
+ 
+ 
 Positions_Monthly:
 LOAD
 *,
@@ -138,7 +134,8 @@ IF(
         'Em Progresso',
         'Não Iniciado'
     )
-) 																														as status_mensal
+) 																														as status_mensal,
+IF((tipo = 'Enhancement' or tipo = 'User Story') and total_horas_estimadas >= 40, 'Sim', 'Não')							as flag_projeto
 ;
 LOAD
     *,
@@ -151,9 +148,9 @@ LOAD
     ) 																													as monthcount,
     
     // gera cada mês do intervalo
-    MonthEnd(AddMonths(data_criacao, IterNo()-1)) 																		as ReferenceDate
-RESIDENT sv_projetos_pa
-
+    Date(MonthEnd(AddMonths(data_criacao, IterNo()-1)), 'DD/MM/YYYY' )													as ReferenceDate
+RESIDENT sv_projetos_pa_f
+ 
 // Controla quantas linhas serão geradas
 WHILE 
     IterNo()-1 <= 
@@ -163,19 +160,14 @@ WHILE
     )
     AND IterNo() <= 150;
  
-flag_projeto:
-Load
-	*,
-    
-    // Considera como projetos só as User Story e Enhancement com mais de 40 horas estimadas
-    IF((tipo = 'Enhancement' or tipo = 'User Story') and total_horas_estimadas >= 40, 'Sim', 'Não')						as flag_projeto
-    RESIDENT Positions_Monthly;
  
-
-
+    
+store Positions_Monthly into [$(silver_layer)sv_projetos_pa_f.qvd] (qvd);
+ 
+ 
 // Limpeza de Tabelas
-DROP TABLE flag_projeto;
-DROP TABLE sv_projetos_pa;
-DROP TABLE bz_projetos_pa_raw;
+ 
 DROP TABLE Positions_Monthly;
-DROP TABLE sv_calendario_d;
+DROP TABLE sv_projetos_pa_f;
+DROP TABLE bz_projetos_pa_raw;
+

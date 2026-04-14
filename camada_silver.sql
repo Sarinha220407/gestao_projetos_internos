@@ -36,7 +36,7 @@ LOAD
 *,
  
 // Separa Data e Hora de Criação
-Date(created_date) 																									as data_criacao,  
+Date(created_date, 'DD/MM/YYYY') 																									as data_criacao,  
 Time(created_date) 																									as hora_criacao,
  
 // Regra: se activated_date estiver nula ou vazia e closed_date estiver preenchida, atribuir created_date à activated_date, mantendo o formato de data e hora.
@@ -108,7 +108,7 @@ GROUP BY parent
 titulo_projeto: 
 left join(sv_projetos_pa_f)
 load Distinct
-id as parent,
+	id as parent,
     titulo as tituloProjeto
 RESIDENT sv_projetos_pa_f
 WHERE tipo = 'User Story' or tipo = 'Enhancement'
@@ -122,19 +122,17 @@ LOAD
 // Define status por mês com base nas datas 
 IF(
     NOT IsNull(data_status_closed) 
-    AND MonthStart(ReferenceDate) = MonthStart(data_status_closed),
+    AND referencedate >= data_status_closed,
     'Concluído',
+
     IF(
         NOT IsNull(data_status_active)
-        AND MonthStart(ReferenceDate) >= MonthStart(data_status_active)
-        AND (
-            IsNull(data_status_closed) 
-            OR MonthStart(ReferenceDate) < MonthStart(data_status_closed)
-        ),
+        AND referencedate >= data_status_active,
         'Em Progresso',
+
         'Não Iniciado'
     )
-) 																														as status_mensal,
+)																														as status_mensal,
 IF((tipo = 'Enhancement' or tipo = 'User Story') and total_horas_estimadas >= 40, 'Sim', 'Não')							as flag_projeto
 ;
 LOAD
@@ -148,7 +146,7 @@ LOAD
     ) 																													as monthcount,
     
     // gera cada mês do intervalo
-    Date(MonthEnd(AddMonths(data_criacao, IterNo()-1)), 'DD/MM/YYYY' )													as ReferenceDate
+    Date(MonthEnd(AddMonths(data_criacao, IterNo()-1)) )													as referencedate
 RESIDENT sv_projetos_pa_f
  
 // Controla quantas linhas serão geradas
@@ -168,6 +166,6 @@ store Positions_Monthly into [$(silver_layer)sv_projetos_pa_f.qvd] (qvd);
 // Limpeza de Tabelas
  
 DROP TABLE Positions_Monthly;
-DROP TABLE sv_projetos_pa_f;
+// DROP TABLE sv_projetos_pa_f;
 DROP TABLE bz_projetos_pa_raw;
 

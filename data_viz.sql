@@ -26,13 +26,17 @@ SET gold_layer = 'lib://Eldorado Data Folder - 3 Recursos Humanos - People Analy
 
 gd_projetos_pa_f:
 Load
-*
+*,
+Date#(Date(referencedate)) as ReferenceDate
 From [$(gold_layer)gd_projetos_pa_f.QVD] (qvd);
+
+
 
 
 gd_calendario_d:
 LOAD
-   Date(load_month, 'DD/MM/YYYY')     as ReferenceDate,
-    *
+*,
+   Date#(Date(load_month, 'DD/MM/YYYY'))     as ReferenceDate,
+   Date#(Date(ano_mes_numero_reduzido, 'DD/MM/YYYY'))
 FROM [lib://Eldorado Data Folder - 3 Recursos Humanos - People Analytics/01. HR Medallion/03. Gold/gd_calendario_d.QVD]
 (qvd);

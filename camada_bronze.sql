@@ -49,5 +49,3 @@ Store bz_projetos_pa_f into [$(bronze_layer)bz_projetos_pa_f.QVD]
 (qvd);
 
 Drop table bz_projetos_pa_f;
-
-

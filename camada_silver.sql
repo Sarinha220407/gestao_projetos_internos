@@ -69,7 +69,7 @@ IF(Len(Trim("Created Date")) = 0, Null(), "Created Date")									as created_dat
 
 // Traz 'Backlog' para os campos que forem PEOPLE ANALYTICS e traz apenas os números de PEOPLE ANALYTICS\Sprint...
 if ("Iteration Path" = 'PEOPLE ANALYTICS', 'Backlog', 
-Num(PurgeChar("Iteration Path", 'PEOPLE ANALYTICS\Sprint '))) 								as sprint,
+Num(PurgeChar(Lower("Iteration Path"), 'people analytics\sprint '))) 						as sprint,
 
 // Transformação de Dados
 Priority 																					as prioridade,
@@ -148,7 +148,7 @@ Month(Alt(data_status_closed, Today()))) -
  (Year(data_criacao) * 12 + Month(data_criacao))
  )
  AND IterNo() <= 150;
-store Positions_Monthly into [$(silver_layer) sv_projetos_pa_f.qvd] 
+store Positions_Monthly into [$(silver_layer)sv_projetos_pa_f.qvd] 
 (qvd);
 
 // Limpeza de Tabelas

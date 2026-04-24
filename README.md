@@ -11,7 +11,7 @@
 
 # **RASCUNHO TELAS:**
 
-* Total de projetos: count(distinct  {<flag_projeto = {'Sim'}>} id)
+* Total de projetos: count(distinct  {<flag_projeto = {'Sim'}, sprint -= {'Backlog'} >} id)
 * Status de todos os projetos;
 * Tipo dos projetos;
 * Quantidade de projetos por pessoa;

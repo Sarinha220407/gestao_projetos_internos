@@ -28,29 +28,39 @@ bz_projetos_pa_raw:
 Load
 *
 FROM [$(bronze_layer)bz_projetos_pa_f.QVD] (qvd);
+
+
 sv_projetos_pa_f:
 LOAD
 *,
 // Separa Data e Hora de Criação
 Date(created_date, 'DD/MM/YYYY') 															as data_criacao, 
 Time(created_date) 																			as hora_criacao,
+
 // Regra: se activated_date estiver nula ou vazia e closed_date estiver preenchida, atribuir created_date à activated_date, mantendo o formato de data e hora.
 Date(
-IF(
- IsNull(activated_date) and Not IsNull (closed_date),
- created_date,
- activated_date)) 																			as data_status_active,
-Time(
+    IF(
+       IsNull(activated_date) and Not IsNull (closed_date),
+       created_date,
+       activated_date
+       )
+   	) 																						as data_status_active,
 
-IF(
- IsNull(activated_date) and Not IsNull (closed_date),
- created_date,
- activated_date))																			as hora_status_active, 
+Time(
+    IF(
+       IsNull(activated_date) and Not IsNull (closed_date),
+       created_date,
+       activated_date
+     	)
+     )																						as hora_status_active, 
 
 Date(closed_date)																			as data_status_closed,
-Time(closed_date)																			as hora_status_closed;
+Time(closed_date)																			as hora_status_closed,
+Date(conclusao_estimada, 'MM/YYYY')															as data_fim;
+
 // Load Precedente(carrega primeiro a tabela debaixo e depois a de cima)
 Load
+
 // Transformação de Dados
 num(ID) 																					as id,
 "Work Item Type" 																			as tipo,
@@ -58,18 +68,40 @@ Title 																						as titulo,
 SubField("Assigned To", '<' ,1 ) 															as responsavel,
 State 																						as status,
 "Tags" 																						as tags,
+
 // Limpa os campos que trazem '' e os transformam em NULL
-IF(Len(Trim("Activated Date")) = 0, Null(), "Activated Date")								as activated_date,
-IF(Len(Trim("Closed Date")) = 0, Null(), "Closed Date")										as closed_date,
-IF(Len(Trim("Created Date")) = 0, Null(), "Created Date")									as created_date,
+IF(
+	Len(
+    	Trim("Activated Date")
+        ) = 0, 
+        Null(), "Activated Date")															as activated_date,
+
+IF(
+	Len(
+    	Trim("Closed Date")
+        ) = 0,
+        Null(), "Closed Date")																as closed_date,
+
+IF(
+	Len(
+    	Trim("Created Date")
+        ) = 0, 
+        Null(), "Created Date")																as created_date,
+
 // Tranformação de Métricas
 "Original Estimate"																			as horas_estimadas,
 "Remaining Work" 																			as horas_restantes,
 "Completed Work"																			as horas_concluidas,
+"Due Date"																					as conclusao_estimada,
 
 // Traz 'Backlog' para os campos que forem PEOPLE ANALYTICS e traz apenas os números de PEOPLE ANALYTICS\Sprint...
 if ("Iteration Path" = 'PEOPLE ANALYTICS', 'Backlog', 
-Num(PurgeChar(Lower("Iteration Path"), 'people analytics\sprint '))) 						as sprint,
+  Num(
+      PurgeChar(
+          Lower("Iteration Path"), 'people analytics\sprint '
+               )
+       )
+ 	) 																						as sprint,
 
 // Transformação de Dados
 Priority 																					as prioridade,
@@ -82,9 +114,23 @@ total_horas_us:
 LEFT JOIN (sv_projetos_pa_f)
 Load
  parent 																					as id,
- Sum( Num#(horas_estimadas, '#.##0,00', '.', ',') )											as total_horas_estimadas,
- Sum( Num#(horas_concluidas, '#.##0,00', '.', ',') )										as total_horas_concluidas,
- Sum(Num#(horas_restantes, '#.##0,00', '.', ',') )											as total_horas_restantes
+ Sum( 
+ 	Num#(
+    	horas_estimadas, '#.##0,00', '.', ','
+        ) 
+     )																						as total_horas_estimadas,
+     
+ Sum( 
+ 	Num#(
+    	horas_concluidas, '#.##0,00', '.', ','
+        ) 
+     )																						as total_horas_concluidas,
+     
+ Sum(
+ 	Num#(
+    	horas_restantes, '#.##0,00', '.', ','
+        ) 
+     )																						as total_horas_restantes
 RESIDENT sv_projetos_pa_f
 WHERE tipo = 'Task'
 GROUP BY parent
@@ -103,50 +149,111 @@ WHERE tipo = 'User Story' or tipo = 'Enhancement';
 Positions_Monthly:
 LOAD
 *,
-// Define status por mês com base nas datas 
+
 IF(
- NOT IsNull(data_status_closed) 
- AND MonthStart(referencedate) = MonthStart(data_status_closed),
- 'Concluído',
- IF(
- NOT IsNull(data_status_active)
- AND MonthStart(referencedate) >= MonthStart(data_status_active)
- AND (
- IsNull(data_status_closed) 
- OR MonthStart(referencedate) < MonthStart(data_status_closed)
- ),
- 'Em Progresso',
- 'Não Iniciado'
- )
+    NOT IsNull(data_status_closed)  // se a data de fechamento nao for nula
+    AND MonthStart(referencedate) = MonthStart(data_status_closed), // e se o começo do mes da referencedate for igual ao inicio do mes da data de fechamento
+
+    'Concluído', // então é concluido
+
+    IF(
+        IsNull(data_status_closed) // se a data fehamento for nula
+        AND NOT IsNull(data_fim) // e data_fim nao for nula
+        AND MonthStart(referencedate) > MonthStart(data_fim), // e o inicio do me da referencedate for maior que o começo do mes da data_fim
+
+        'Atraso', // então esta em atraso
+
+        IF(
+            NOT IsNull(data_fim) // se nao for nula data_fim
+            AND ( // e
+                MonthStart(referencedate) = MonthStart(data_fim) // começo do mes da reerencedate for igual ao começo do mes da data_fim
+                OR // ou
+                (
+                    MonthStart(referencedate) > MonthStart(Today()) // começo do mes da referencedate for maior que o começo do mes de hoje
+                    AND MonthStart(referencedate) <= MonthStart(data_fim) // e começo do mes da referencedate menor ou igual que ao inicio do mes da data_fim
+                )
+                OR // ou
+                (
+                    NOT IsNull(data_status_closed) // data_status_closed nao for nulo
+                    AND MonthStart(referencedate) > MonthStart(data_status_closed) // e começo do mes da referencedate for maior que data_status_closed
+                    AND MonthStart(referencedate) <= MonthStart(data_fim) // e o comeco do mes da referencedate for menor ou igual ao começo do mes da data_fim
+                )
+            ),
+
+            'Planejado',
+
+            IF(
+                NOT IsNull(data_status_active) // nao for nulo o data_status_active
+                AND MonthStart(referencedate) >= MonthStart(data_status_active) // e o começo do mes da referencedate for maior ou igual que ocomeço do mes da data_status_active
+                AND MonthStart(referencedate) <= MonthStart(Today()) // e o começo do mes da referencedate foi menor ou igual ao começo do mes de hoje
+                AND ( // e
+                    IsNull(data_status_closed) // o data_status_closed for nulo
+                    OR MonthStart(referencedate) <= MonthStart(data_status_closed) // ou o começo do mes da referencedate for menor que o comeco do mes do data_status_closed
+                ),
+
+                'Em Progresso',
+
+                'Não Iniciado'
+            )
+        )
+    )
 ) 																							as status_mensal,
 
 IF((tipo = 'Enhancement' or tipo = 'User Story') and 
-total_horas_estimadas >= 40, 'Sim', 'Não')													as flag_projeto
-;
+total_horas_estimadas >= 40, 'Sim', 'Não')													as flag_projeto,;
 
 LOAD
  *,
  // cálculo quantidade de meses entre data criação e data fechamento (ou hoje)
  (
- Year(Alt(data_status_closed, Today())) * 12 + 
-Month(Alt(data_status_closed, Today()))
- ) -
+ Year(Alt(data_fim, Today())) * 12 + 
+ Month(Alt(data_fim, Today())
+ 
+ )
+ ) 
+ -
  (
  Year(data_criacao) * 12 + Month(data_criacao)
  ) 																							as monthcount,
  
  // gera cada mês do intervalo
- Date(MonthEnd(AddMonths(data_criacao, IterNo()-1)) )										as referencedate
+ Date#(Date(MonthEnd(AddMonths(data_criacao, IterNo()-1, 1)))) 								as referencedate
 RESIDENT sv_projetos_pa_f
 
 // Controla quantas linhas serão geradas
 WHILE 
  IterNo()-1 <= 
- (
- (Year(Alt(data_status_closed, Today())) * 12 + 
-Month(Alt(data_status_closed, Today()))) -
- (Year(data_criacao) * 12 + Month(data_criacao))
- )
+(
+  Year(
+   	 Alt(
+    	data_status_closed, 
+    	RangeMax(
+              Alt(
+                  data_fim
+                  ), Today()
+                 )
+          )
+        ) * 12 
+        
+        +
+        
+        
+  Month(
+  		Alt(
+          data_status_closed, 
+          RangeMax(
+              Alt(
+                  data_fim
+                  ), Today()
+                  )
+           )
+        )
+)
+
+-
+
+(Year(data_criacao) * 12 + Month(data_criacao))
+
  AND IterNo() <= 150;
 store Positions_Monthly into [$(silver_layer)sv_projetos_pa_f.qvd] 
 (qvd);

@@ -157,10 +157,13 @@ IF(
     'Concluído', // então é concluido
 
     IF(
-        IsNull(data_status_closed) // se a data fehamento for nula
-        AND NOT IsNull(data_fim) // e data_fim nao for nula
-        AND MonthStart(referencedate) > MonthStart(data_fim), // e o inicio do me da referencedate for maior que o começo do mes da data_fim
-
+        // IsNull(data_status_closed) // se a data fehamento for nula
+         NOT IsNull(data_fim) // AND e data_fim nao for nula
+        AND MonthStart(referencedate) > MonthStart(data_fim)// , // e o inicio do me da referencedate for maior que o começo do mes da data_fim
+		AND (
+            IsNull(data_status_closed)  // ainda não fechou
+            OR MonthStart(referencedate) < MonthStart(data_status_closed) // fechou mas ainda não chegou no mês do fechamento
+        ),
         'Atraso', // então esta em atraso
 
         IF(
@@ -225,31 +228,18 @@ WHILE
  IterNo()-1 <= 
 (
   Year(
-   	 Alt(
-    	data_status_closed, 
-    	RangeMax(
-              Alt(
-                  data_fim
-                  ), Today()
-                 )
-          )
-        ) * 12 
-        
-        +
-        
-        
+    IF(NOT IsNull(data_status_closed),
+        RangeMax(Alt(data_status_closed), Alt(data_fim)),  // fechado: vai até o maior entre fechamento e data_fim
+        RangeMax(Alt(data_fim), Today())                   // aberto: vai até o maior entre data_fim e hoje
+    )
+  ) * 12 +
   Month(
-  		Alt(
-          data_status_closed, 
-          RangeMax(
-              Alt(
-                  data_fim
-                  ), Today()
-                  )
-           )
-        )
+    IF(NOT IsNull(data_status_closed),
+        RangeMax(Alt(data_status_closed), Alt(data_fim)),
+        RangeMax(Alt(data_fim), Today())
+    )
+  )
 )
-
 -
 
 (Year(data_criacao) * 12 + Month(data_criacao))
